@@ -1,0 +1,10 @@
+{
+    "jsonrpc":"2.0",
+    "id":1,
+    "method":"author_insertKey",
+    "params": [
+        "gran",
+        "document country slide theory always monster surge forget inmate answer foam force",
+        "0x8b14da762452fbc496e298700a6089881957f67ccaa67de6e8ff90a35c6c82c3"
+    ]
+}

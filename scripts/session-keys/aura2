@@ -1,0 +1,10 @@
+{
+    "jsonrpc":"2.0",
+    "id":1,
+    "method":"author_insertKey",
+    "params": [
+        "aura",
+        "danger barrel try mosquito divide margin crazy cushion fuel pioneer drastic clap",
+        "0x6a2d727e23ad3a31ad151e7e8d1fc612d352762e83710a1f499dfe2c5b1f4d0a"
+    ]
+}

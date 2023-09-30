@@ -1,0 +1,10 @@
+{
+    "jsonrpc":"2.0",
+    "id":1,
+    "method":"author_insertKey",
+    "params": [
+        "gran",
+        "job polar rapid pave swing spray mushroom dice reform elevator coral series",
+        "0x2710748c330d19caa68d72c837d83c1b48a71f5817d7ad25e76af2268e6cee24"
+    ]
+}

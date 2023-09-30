@@ -1,0 +1,10 @@
+{
+    "jsonrpc":"2.0",
+    "id":1,
+    "method":"author_insertKey",
+    "params": [
+        "aura",
+        "draw novel tilt script merge cheese miracle agree frame run jacket seat",
+        "0x44846c8f815c2c813465bc75401f6ed78f52732a8dbbb5a1d76fd0daed5e8563"
+    ]
+}
