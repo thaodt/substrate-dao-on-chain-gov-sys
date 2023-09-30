@@ -49,9 +49,18 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		/// Event documentation should end with an array that provides descriptive names for event
 		/// parameters. [something, who]
-		SomethingStored { something: u32, who: T::AccountId },
-		Increased { value: u32, who: T::AccountId },
-		Decreased { value: u32, who: T::AccountId },
+		SomethingStored {
+			something: u32,
+			who: T::AccountId,
+		},
+		Increased {
+			value: u32,
+			who: T::AccountId,
+		},
+		Decreased {
+			value: u32,
+			who: T::AccountId,
+		},
 	}
 
 	// Errors inform users that something went wrong.
@@ -61,7 +70,7 @@ pub mod pallet {
 		NoneValue,
 		/// Errors should have helpful documentation associated with them.
 		StorageOverflow,
-		CanNotSub
+		CanNotSub,
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -123,7 +132,6 @@ pub mod pallet {
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}
-
 
 		/// An example dispatchable that may throw a custom error.
 		#[pallet::call_index(1)]

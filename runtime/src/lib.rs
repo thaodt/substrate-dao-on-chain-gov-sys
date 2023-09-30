@@ -36,7 +36,7 @@ pub use frame_support::{
 		},
 		IdentityFee, Weight,
 	},
-	StorageValue,
+	PalletId, StorageValue,
 };
 pub use frame_system::Call as SystemCall;
 pub use pallet_balances::Call as BalancesCall;
@@ -48,6 +48,9 @@ pub use sp_runtime::{Perbill, Permill};
 
 /// Import the template pallet.
 pub use pallet_template;
+
+/// Add custom DAO pallet.
+pub use pallet_dao;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -274,8 +277,14 @@ impl pallet_template::Config for Runtime {
 	type WeightInfo = pallet_template::weights::SubstrateWeight<Runtime>;
 }
 
+parameter_types! {
+	pub const DaoPalletId: PalletId = PalletId(*b"/pal/dao");
+}
+
 impl pallet_dao::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
+	type PalletId = DaoPalletId;
+	type Currency = Balances;
 	type WeightInfo = pallet_dao::weights::SubstrateWeight<Runtime>;
 }
 
@@ -291,7 +300,7 @@ construct_runtime!(
 		Sudo: pallet_sudo,
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template,
-		DaoModule: pallet_dao,
+		Dao: pallet_dao,
 	}
 );
 
@@ -340,6 +349,7 @@ mod benches {
 		[pallet_timestamp, Timestamp]
 		[pallet_sudo, Sudo]
 		[pallet_template, TemplateModule]
+		// [pallet_dao, DaoModule]
 	);
 }
 

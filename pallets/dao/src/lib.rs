@@ -19,39 +19,94 @@ pub use weights::*;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use frame_support::pallet_prelude::*;
+	use frame_support::{
+		pallet_prelude::*,
+		traits::{Currency, ReservableCurrency},
+		PalletId,
+	};
 	use frame_system::pallet_prelude::*;
+	use sp_runtime::traits::AtLeast32BitUnsigned;
 
 	#[pallet::pallet]
-	pub struct Pallet<T>(_);
+	pub struct Pallet<T>(PhantomData<T>);
+
+	// The pallet's runtime storage items.
+	// https://docs.substrate.io/main-docs/build/runtime-storage/
+	#[pallet::storage]
+	pub type Proposals<T: Config> =
+		StorageMap<_, Blake2_128Concat, T::ProposalId, Proposal<T::AccountId, T::Balance>>;
+
+	#[pallet::storage]
+	pub type Votes<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		T::ProposalId,
+		Blake2_128Concat,
+		T::AccountId,
+		Vote<T::AccountId>,
+	>;
+
+	// #[pallet::storage]
+	// pub type DaoConfig<T: Config> = StorageValue<_, DaoConfig<T::BlockNumber, T::Balance>>;
+
+	#[pallet::storage]
+	pub type Masks<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, T::Hash>;
+
+	#[pallet::storage]
+	pub type RevealedValues<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, u32>;
+
+	#[pallet::storage]
+	pub type ActiveBots<T: Config> = StorageValue<_, u32>;
+
+	// pub type DaoConfig<BlockNumber, Balance> = (BlockNumber, Balance);
+
+	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+	pub struct Proposal<AccountId, Balance> {
+		proposer: AccountId,
+		value: Balance,
+		description: Vec<u8>,
+	}
+
+	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+	pub struct DaoConfig<BlockNumber, Balance> {
+		block_number: BlockNumber,
+		balance: Balance,
+	}
+
+	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+	pub struct Vote<AccountId> {
+		voter: AccountId,
+		is_support: bool,
+	}
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+		#[pallet::constant]
+		type PalletId: Get<PalletId>;
+		/// type currency for this pallet, it is used to reserve the storage, staking, and reward
+		/// for randomness.
+		type Currency: ReservableCurrency<Self::AccountId>;
 		/// Type representing the weight of this pallet
 		type WeightInfo: WeightInfo;
-	}
 
-	// The pallet's runtime storage items.
-	// https://docs.substrate.io/main-docs/build/runtime-storage/
-	#[pallet::storage]
-	#[pallet::getter(fn something)]
-	// Learn more about declaring storage items:
-	// https://docs.substrate.io/main-docs/build/runtime-storage/#declaring-storage-items
-	pub type Something<T> = StorageValue<_, u32>;
+		type ProposalId: Parameter + Default + Copy;
+		type Balance: Parameter + Member + AtLeast32BitUnsigned + Default + Copy;
+		type BlockNumber: Parameter + Member + AtLeast32BitUnsigned + Default + Copy;
+	}
 
 	// Pallets use events to inform users when important changes are made.
 	// https://docs.substrate.io/main-docs/build/events-errors/
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Event documentation should end with an array that provides descriptive names for event
-		/// parameters. [something, who]
-		SomethingStored { something: u32, who: T::AccountId },
-		Increased { value: u32, who: T::AccountId },
-		Decreased { value: u32, who: T::AccountId },
+		MaskSubmitted(T::AccountId),
+		ValueRevealed(T::AccountId),
+		RandomNumberGenerated(T::AccountId, u32),
+		Voted(T::AccountId, T::ProposalId, bool),
+		ProposalCreated(T::AccountId, T::ProposalId, T::Balance),
 	}
 
 	// Errors inform users that something went wrong.
@@ -61,7 +116,7 @@ pub mod pallet {
 		NoneValue,
 		/// Errors should have helpful documentation associated with them.
 		StorageOverflow,
-		CanNotSub
+		CanNotSub,
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -69,80 +124,55 @@ pub mod pallet {
 	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// An example dispatchable that takes a singles value as a parameter, writes the value to
-		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
 		#[pallet::call_index(0)]
-		#[pallet::weight(T::WeightInfo::do_something())]
-		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
-			// Check that the extrinsic was signed and get the signer.
-			// This function will return an error if the extrinsic is not signed.
-			// https://docs.substrate.io/main-docs/build/origins/
-			let who = ensure_signed(origin)?;
+		#[pallet::weight(10_000)] // TODO: update as auto weight!
+		pub fn create_proposal(
+			origin: OriginFor<T>,
+			value: T::Balance,
+			description: Vec<u8>,
+		) -> DispatchResult {
+			let proposer = ensure_signed(origin)?;
 
-			// Update storage.
-			<Something<T>>::put(something);
+			// Check if the proposer has enough balance
+			ensure!(T::Currency::free_balance(&proposer) >= value, Error::<T>::InsufficientBalance);
 
-			// Emit an event.
-			Self::deposit_event(Event::SomethingStored { something, who });
-			// Return a successful DispatchResultWithPostInfo
+			// Generate a new proposal ID
+			let proposal_id = T::ProposalId::unique_saturated_from(0);
+
+			// Create a new proposal
+			let proposal = Proposal { proposer: proposer.clone(), value, description };
+
+			// Store the proposal
+			Proposals::<T>::insert(proposal_id, proposal);
+
+			// Emit the ProposalCreated event
+			Self::deposit_event(Event::ProposalCreated(proposer, proposal_id, value));
+
 			Ok(())
 		}
 
-		#[pallet::call_index(4)]
-		#[pallet::weight(T::WeightInfo::do_something())]
-		pub fn increase(origin: OriginFor<T>) -> DispatchResult {
-			// Check that the extrinsic was signed and get the signer.
-			// This function will return an error if the extrinsic is not signed.
-			// https://docs.substrate.io/main-docs/build/origins/
-			let who = ensure_signed(origin)?;
-			let current_value = Something::<T>::get().unwrap_or_default();
-			let next_value = current_value + 1;
-			// Update storage.
-			<Something<T>>::put(next_value);
-
-			// Emit an event.
-			Self::deposit_event(Event::Increased { value: next_value, who });
-			// Return a successful DispatchResultWithPostInfo
-			Ok(())
-		}
-
-		#[pallet::call_index(5)]
-		#[pallet::weight(T::WeightInfo::do_something())]
-		pub fn decrease(origin: OriginFor<T>) -> DispatchResult {
-			// Check that the extrinsic was signed and get the signer.
-			// This function will return an error if the extrinsic is not signed.
-			// https://docs.substrate.io/main-docs/build/origins/
-			let who = ensure_signed(origin)?;
-			let current_value = Something::<T>::get().unwrap_or_default();
-			let next_value = current_value.checked_sub(1).ok_or(Error::<T>::CanNotSub)?;
-			// Update storage.
-			<Something<T>>::put(next_value);
-
-			// Emit an event.
-			Self::deposit_event(Event::Decreased { value: next_value, who });
-			// Return a successful DispatchResultWithPostInfo
-			Ok(())
-		}
-
-
-		/// An example dispatchable that may throw a custom error.
 		#[pallet::call_index(1)]
-		#[pallet::weight(T::WeightInfo::cause_error())]
-		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
+		#[pallet::weight(10_000)] // TODO: update as auto weight!
+		pub fn vote(
+			origin: OriginFor<T>,
+			proposal_id: T::ProposalId,
+			is_support: bool,
+		) -> DispatchResult {
+			let voter = ensure_signed(origin)?;
 
-			// Read a value from storage.
-			match <Something<T>>::get() {
-				// Return an error if the value has not been set.
-				None => return Err(Error::<T>::NoneValue.into()),
-				Some(old) => {
-					// Increment the value read from storage; will error in the event of overflow.
-					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-					// Update the value in storage with the incremented result.
-					<Something<T>>::put(new);
-					Ok(())
-				},
-			}
+			// Check if the proposal exists
+			ensure!(Proposals::<T>::contains_key(proposal_id), Error::<T>::InvalidProposalId);
+
+			// Create a new vote
+			let vote = Vote { voter: voter.clone(), is_support };
+
+			// Store the vote
+			Votes::<T>::insert(proposal_id, voter, vote);
+
+			// Emit the Voted event
+			Self::deposit_event(Event::Voted(voter, proposal_id, is_support));
+
+			Ok(())
 		}
 	}
 }
